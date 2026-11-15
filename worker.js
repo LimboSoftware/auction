@@ -3,7 +3,7 @@ export default {async fetch(req,env){
  const u=new URL(req.url);
  if(!u.pathname.startsWith("/api/"))return env.ASSETS.fetch(req);
  if(req.method!=="GET")return new Response("Method not allowed",{status:405});
- if(u.pathname==="/api/version")return Response.json({version:"1.2",build:"purchase-coins",market:MARKET},{headers:{"Cache-Control":"no-store"}});
+ if(u.pathname==="/api/version")return Response.json({version:"1.3",build:"category-refresh-fix",market:MARKET},{headers:{"Cache-Control":"no-store"}});
  let path;
  if(u.pathname==="/api/table")path="/pricetable/"+MARKET;
  else if(u.pathname==="/api/markets")path="/markets";
