@@ -1,4 +1,4 @@
-name = "auction-scout"
+name = "auction"
 main = "worker.js"
 compatibility_date = "2026-11-01"
 [assets]
