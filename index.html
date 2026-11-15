@@ -19,8 +19,8 @@ let data=[],stamp=0,limit=100,loading=false,expiry=0,detailVersion=0,detailTimer
 let namesPending=new Map(), metadataNotice='', marketGeneration=0, metadataTimer=null;
 
 function classify(meta){
- const ids={0:'consumables',1:'bags',2:'gear',3:'other',4:'gear',5:'other',6:'trade',7:'trade',8:'other',9:'recipes',10:'other',11:'trade',12:'other',13:'other',14:'other',15:'other',16:'other',17:'other',18:'other',19:'other'};
- const raw=meta.itemClass??meta.class??meta.className??meta.itemClassId??meta.classId;
+ const ids={0:'consumables',1:'bags',2:'gear',3:'gear',4:'gear',5:'other',6:'trade',7:'trade',8:'other',9:'recipes',10:'other',11:'trade',12:'other',13:'other',14:'other',15:'other',16:'other',17:'other',18:'other',19:'other'};
+ const raw=meta.itemClass??meta.class??meta.className??meta.itemClassId??meta.classId??meta.item_class??meta.class_id;
  const v=raw&&typeof raw==='object'?(raw.name??raw.id):raw;
  if(typeof v==='number'||typeof v==='string'&&/^\d+$/.test(v))return ids[Number(v)]||'unknown';
  const s=String(v??'').toLowerCase().replace(/[^a-z]/g,'');
@@ -45,10 +45,10 @@ function categorySummary(pool){
 async function classifyMore(single=false){
  if(categoryBusy||portfolioMode||!stamp)return;categoryBusy=true;const gen=marketGeneration;categoryNotice='Loading item classes…';categorySummary(categoryPool);
  try{for(let i=0;i<(single?1:5);i++){if(gen!==marketGeneration)break;const ids=categoryPool.filter(r=>categoryOf(r.id)==='unknown'&&!namesPending.has(r.id)).slice(0,100).map(r=>r.id);if(!ids.length)break;const ok=await resolveNames(ids,true);if(!ok)break;}}
- finally{categoryBusy=false;if(gen===marketGeneration){categoryNotice='Classification batch finished.';render(false);}}
+ finally{categoryBusy=false;if(gen===marketGeneration){if(categoryNotice==='Loading item classes…')categoryNotice='Classification batch finished.';render(false);}}
 }
 function setupCategories(){
- for(const [key,label] of Object.entries(CATEGORY_LABELS)){const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.category=key;b.setAttribute('aria-pressed',String(key===category));b.onclick=()=>{category=key;limit=1000;sellLimit=1000;categoryNotice='';for(const x of $('categoryTabs').children)x.setAttribute('aria-pressed',String(x.dataset.category===category));render();if(category!=='all'&&category!=='unknown')void classifyMore(true)};$('categoryTabs').append(b)}
+ for(const [key,label] of Object.entries(CATEGORY_LABELS)){const b=document.createElement('button');b.type='button';b.textContent=label;b.dataset.category=key;b.setAttribute('aria-pressed',String(key===category));b.onclick=()=>{category=key;limit=100;sellLimit=100;categoryNotice='';for(const x of $('categoryTabs').children)x.setAttribute('aria-pressed',String(x.dataset.category===category));render();if(category!=='all'&&category!=='unknown')void classifyMore(true)};$('categoryTabs').append(b)}
  $('categoryLoad').onclick=()=>classifyMore();
 }
 
@@ -66,8 +66,8 @@ async function resolveNames(ids,forceClass=false){
    if(!node||typeof node!=='object'||depth>7)return;
    if(Array.isArray(node)){for(const x of node)visit(x,null,depth+1);return;}
    let item=node.item&&typeof node.item==='object'?node.item:node;
-   let id=Number(item.id??item.itemId??node.itemId??key);
-   if(!remaining.has(id)&&key!=null&&remaining.has(Number(key)))id=Number(key);
+   let id=Number(item.id??item.itemId??item.item_id??node.itemId??node.item_id??key);
+   if(!wanted.includes(id)&&key!=null&&wanted.includes(Number(key)))id=Number(key);
    const name=item.name??node.name;const cat=classify({...node,...item});if(wanted.includes(id)&&cat!=='unknown'&&age>0){categoryMeta.set(id,{cat,until});classified.add(id);}
    if(remaining.has(id)&&typeof name==='string'&&name.trim()){
     temporaryNames.set(id,name.trim());remaining.delete(id);found++;
@@ -78,7 +78,7 @@ async function resolveNames(ids,forceClass=false){
   metadataNotice=remaining.size?'Some item names unavailable; click an ID for its history and name.':'Item names resolved from AHledger.';
   if(age>0)setTimeout(()=>{if(generation!==marketGeneration)return;for(const id of wanted){if(namesPending.get(id)===request){namesPending.delete(id);temporaryNames.delete(id);}if(categoryMeta.get(id)?.until===until)categoryMeta.delete(id);}render(false)},Math.min(age,2147483647));else{for(const id of wanted)temporaryNames.delete(id);}
   render(false);return true;
- }catch(e){if(generation===marketGeneration){metadataNotice='Item metadata could not be loaded ('+e.message+'). Prices are unchanged.';categoryNotice=metadataNotice;render(false)}return false;}
+ }catch(e){if(generation===marketGeneration){for(const id of wanted)if(namesPending.get(id)===request)namesPending.delete(id);metadataNotice='Item metadata could not be loaded ('+e.message+'). Prices are unchanged.';categoryNotice=metadataNotice;render(false)}return false;}
 }
 
 
