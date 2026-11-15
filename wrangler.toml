@@ -5,9 +5,3 @@ compatibility_date = "2026-11-01"
 directory = "./public"
 binding = "ASSETS"
 run_worker_first = ["/api/*"]
-[triggers]
-crons = ["25 * * * *"]
-[[d1_databases]]
-binding = "DB"
-database_name = "auction-scout"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
