@@ -3,9 +3,10 @@ export default {async fetch(req,env){
  const u=new URL(req.url);
  if(!u.pathname.startsWith("/api/"))return env.ASSETS.fetch(req);
  if(req.method!=="GET")return new Response("Method not allowed",{status:405});
- if(u.pathname==="/api/version")return Response.json({version:"1.9",build:"weekly-market-timing",market:MARKET},{headers:{"Cache-Control":"no-store"}});
+ if(u.pathname==="/api/version")return Response.json({version:"2.0",build:"cross-faction-trading",market:MARKET},{headers:{"Cache-Control":"no-store"}});
  let path;
  if(u.pathname==="/api/table")path="/pricetable/"+MARKET;
+ else if(u.pathname==="/api/table/horde")path="/pricetable/forever.normal.horde.eu";
  else if(u.pathname==="/api/markets")path="/markets";
  else if(u.pathname==="/api/crafting"){const profession=u.searchParams.get("profession")||"";if(!["Alchemy","Blacksmithing","Cooking","Enchanting","Engineering","First Aid","Fishing","Herbalism","Leatherworking","Mining","Skinning","Tailoring"].includes(profession))return new Response("Invalid profession",{status:400});path="/crafting/"+MARKET+"?all=1&limit=500&profession="+encodeURIComponent(profession);}
  else if(u.pathname==="/api/disenchant")path="/disenchant/"+MARKET+"?format=csv";
