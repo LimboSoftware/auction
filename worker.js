@@ -3,7 +3,7 @@ export default {async fetch(req,env){
  const u=new URL(req.url);
  if(!u.pathname.startsWith("/api/"))return env.ASSETS.fetch(req);
  if(req.method!=="GET")return new Response("Method not allowed",{status:405});
- if(u.pathname==="/api/version")return Response.json({version:"1.3",build:"category-refresh-fix",market:MARKET},{headers:{"Cache-Control":"no-store"}});
+ if(u.pathname==="/api/version")return Response.json({version:"1.4",build:"reliability-audit",market:MARKET},{headers:{"Cache-Control":"no-store"}});
  let path;
  if(u.pathname==="/api/table")path="/pricetable/"+MARKET;
  else if(u.pathname==="/api/markets")path="/markets";
@@ -13,7 +13,7 @@ export default {async fetch(req,env){
  else if(/^\/api\/item\/[1-9]\d{0,9}$/.test(u.pathname))path="/prices/"+MARKET+"/"+u.pathname.split("/").pop()+"?range=7d";
  else return new Response("Not found",{status:404});
  try{
- const upstream=await fetch(BASE+path,{headers:{"Accept":path.startsWith("/pricetable")?"text/plain":path.startsWith("/disenchant")?"text/csv":"application/json"}});
+ const upstream=await fetch(BASE+path,{signal:AbortSignal.timeout(20000),headers:{"Accept":path.startsWith("/pricetable")?"text/plain":path.startsWith("/disenchant")?"text/csv":"application/json"}});
  const headers=new Headers();
  for(const k of ["content-type","cache-control","age","date","etag","retry-after","link"])if(upstream.headers.has(k))headers.set(k,upstream.headers.get(k));
  // Do not store API data in D1 or archive it. Preserve provider caching rules.
