@@ -6,6 +6,7 @@ export default {async fetch(req,env){
  let path;
  if(u.pathname==="/api/table")path="/pricetable/"+MARKET;
  else if(u.pathname==="/api/markets")path="/markets";
+ else if(u.pathname==="/api/names"){const ids=u.searchParams.get("items")||"";if(!/^[1-9]\d{0,9}(,[1-9]\d{0,9}){0,99}$/.test(ids))return new Response("Invalid item IDs",{status:400});path="/tooltip/"+MARKET+"?items="+ids;}
  else if(/^\/api\/item\/[1-9]\d{0,9}$/.test(u.pathname))path="/prices/"+MARKET+"/"+u.pathname.split("/").pop()+"?range=7d";
  else return new Response("Not found",{status:404});
  try{
