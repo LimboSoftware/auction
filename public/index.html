@@ -85,13 +85,13 @@ async function resolveNames(ids,forceClass=false){
 
 
 
-function ledgerCalc(events){
+function ledgerCalc(events,onEvent){
  const lots=new Map(), totals={spent:0,gross:0,fees:0,expenses:0,realised:0,costBasis:0,units:0,net:0};
  const integer=(n,min=0)=>Number.isSafeInteger(n)&&n>=min&&n<=1e12;
  const add=(k,v)=>{totals[k]+=v;if(!Number.isSafeInteger(totals[k]))throw Error("Ledger total too large")};
  for(const e of events){
   if(!e||!['buy','sell','expense'].includes(e.type)||!Number.isFinite(Date.parse(e.date))||!integer(e.total)||!integer(e.fee)||!Number.isSafeInteger(e.id)||e.id<0||typeof e.name!=='string'||e.name.length>150||!integer(e.qty))throw Error("Invalid transaction");
-  if(e.type==='expense'){if(e.qty!==0||e.id!==0||e.fee!==0||e.total<=0)throw Error("Invalid expense");add('expenses',e.total);continue;}
+  if(e.type==='expense'){if(e.qty!==0||e.id!==0||e.fee!==0||e.total<=0)throw Error("Invalid expense");add('expenses',e.total);if(onEvent)onEvent(e,totals.realised-totals.expenses);continue;}
   if(e.id<=0||e.qty<=0||e.total<=0||!e.name.trim())throw Error("Item, quantity and amount required");
   if(e.type==='buy'){if(e.fee!==0)throw Error("Include purchase costs in total paid");if(!lots.has(e.id))lots.set(e.id,[]);lots.get(e.id).push({id:e.id,name:e.name,qty:e.qty,remaining:e.qty,total:e.total,used:0});add('spent',e.total);}
   else{
@@ -105,6 +105,7 @@ function ledgerCalc(events){
    }
    add('gross',e.total);add('fees',e.fee);add('realised',e.total-e.fee-basis);
   }
+  if(onEvent)onEvent(e,totals.realised-totals.expenses);
  }
  const holdings=[];
  for(const [id,stock] of lots){let qty=0,basis=0,name=stock.at(-1).name;for(const l of stock){qty+=l.remaining;basis+=l.total-Number(BigInt(l.total)*BigInt(l.used)/BigInt(l.qty));}
@@ -196,7 +197,7 @@ function setupAlerts(){
  $('useQuote').onclick=()=>{const q=Number($('purchaseQty').value);if(Number.isSafeInteger(q)&&q>0&&Number.isSafeInteger(q*purchaseUnit)){$('purchaseTotal').value=(q*purchaseUnit/10000).toFixed(4);purchasePreview()}};
  $('cancelPurchase').onclick=()=>$('purchaseDialog').close();
  $('purchaseForm').onsubmit=e=>{e.preventDefault();try{if(!tradeStorageOK)throw Error('Restore backup first');const qty=Number($('purchaseQty').value),total=goldCopper($('purchaseTotal').value);persistTrades([...trades,{type:'buy',id:purchaseId,name:purchaseNameText,qty,total,fee:0,date:new Date().toISOString()}]);$('purchaseDialog').close();alertNotice='Purchase saved. Checking for selling opportunities.';renderAlerts();queueHoldingCheck()}catch(err){$('purchaseError').textContent=err.message}};
- setInterval(()=>{if((ledgerCalc(trades).holdings.length||$('buyNotify').checked)&&Date.now()>=marketRetryAt){if(Date.now()-lastMarketAttempt>=900000&&!checking&&!loading)void scan(true);else if(Date.now()-lastHoldingCheck>=900000)void monitorHoldings()}},900000);
+ setInterval(()=>{if((ledgerCalc(trades).holdings.length||$('buyNotify').checked)&&Date.now()>=marketRetryAt){if(Date.now()-lastMarketAttempt>=900000&&!checking&&!loading)void scan(true);else{if(Date.now()-lastHoldingCheck>=900000)void monitorHoldings();if($('buyNotify').checked)queueBuyCheck(65000)}}},900000);
  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&(ledgerCalc(trades).holdings.length||$('buyNotify').checked)&&Date.now()-lastMarketAttempt>=900000&&Date.now()>=marketRetryAt&&!loading&&!checking)void scan(true)});
 }
 
@@ -209,7 +210,7 @@ function simulate(series,opts){
  let trades=[],open=null,cash=opts.capital,peak=cash,drawdown=0;
  for(let i=0;i<ps.length;i++){const p=ps[i],prior=ps.slice(0,i).filter(x=>x.t>=p.t-72*H&&x.t<p.t);
  if(open){if(p.t>open.t&&(p.min>=open.target||p.t-open.t>=opts.hours*H)){const sale=Math.min(open.target,p.min),net=Math.floor(sale*.95)-opts.extra;cash+=net;trades.push({...open,sale,profit:net-open.cost,hours:(p.t-open.t)/H});open=null;} }
- else if(prior.length>=18&&p.t-prior[0].t>=36*H){const base=med(prior.map(x=>x.median)),noise=Math.max(.05*base,1.4826*med(prior.map(x=>Math.abs(x.median-base)))),recent=med(prior.filter(x=>x.t>=p.t-12*H).map(x=>x.median)),target=Math.floor(Math.min(base*.90,p.median*.97,recent*.97));const cost=Math.ceil(p.min+opts.extra);
+ else if(prior.length>=18&&p.t-prior[0].t>=36*H){const base=med(prior.map(x=>x.median)),noise=Math.max(.05*base,1.4826*med(prior.map(x=>Math.abs(x.median-base)))),recent=med(prior.filter(x=>x.t>=p.t-12*H).map(x=>x.median)),target=Math.floor(Math.min(base*.90,p.median*.97,recent*.97));const cost=Math.ceil(p.min);
  if(recent>=base*.85&&p.median>=base*.85&&1-p.min/base>=opts.discount&&base-p.min>=2.5*noise&&p.min<=p.median*.85&&Math.floor(target*.95)-opts.extra>cost&&cash>=cost){open={t:p.t,cost,target};cash-=cost;}}
  const equity=cash+(open?Math.max(0,Math.floor(p.min*.95)-opts.extra):0);peak=Math.max(peak,equity);drawdown=Math.max(drawdown,peak-equity);
  }
@@ -239,16 +240,16 @@ function renderRisk(){const box=$('riskAlerts');box.replaceChildren();if(!freshM
  }}
 function queueBuyCheck(delay=1500){clearTimeout(buyAlertTimer);if($('buyNotify').checked)buyAlertTimer=setTimeout(()=>void monitorBuys(),delay)}
 async function monitorBuys(){
- if(!$('buyNotify').checked||buyAlertBusy||!freshMarket())return;
+ if(!$('buyNotify').checked||buyAlertBusy)return;if(!freshMarket()){if(!checking&&!loading&&Date.now()>=marketRetryAt&&Date.now()-lastMarketAttempt>=60000)void scan(true);return;}
  if(checking||loading||Date.now()-lastBatch<60000){queueBuyCheck(Math.max(15000,61000-(Date.now()-lastBatch)));return}
  if(Date.now()<historyRetryAt)return;const cash=capitalState().budget,cost=Math.max(0,Math.ceil(value('cost'))),max=$('maxUnit').value.trim()===''?Infinity:value('maxUnit')*10000;
  const list=data.filter(r=>r.m7>0&&r.median>0&&r.min<=max&&r.min+cost<=cash&&r.sales>=Math.max(10,value('sales'))).map(r=>screen(r,cost)).filter(r=>r.signal==='Unchecked'&&r.d>=value('discount')&&r.net>=value('profit')&&r.net>0&&!getCheck(r.id)).sort((a,b)=>b.score-a.score).slice(0,8);
  if(!list.length)return;buyAlertBusy=true;checking=true;lastBatch=Date.now();const gen=marketGeneration;
  try{for(const r of list){if(gen!==marketGeneration||!$('buyNotify').checked)break;try{const res=await fetch('/api/item/'+r.id);if(res.status===429||res.status===503){historyRetryAt=Date.now()+Math.max(900000,(Number(res.headers.get('retry-after'))||0)*1000);break}if(!res.ok)break;const d=await res.json();if(gen!==marketGeneration)break;if(d.market!==MARKET||Number(d.item?.id)!==r.id||!Array.isArray(d.series))continue;const age=ttl(res);if(age<=0)break;const until=Date.now()+age;checks.set(r.id,{result:assess(r,d.series,stamp,d.latest),until});setTimeout(()=>{if(checks.get(r.id)?.until===until){checks.delete(r.id);render(false)}},Math.min(age,2147483647));render(false)}catch{break}}}finally{checking=false;buyAlertBusy=false;render(false)}
 }
-function renderPerformance(){if(!portfolioMode)return;const t=ledgerCalc(trades).totals;$('periodStats').replaceChildren();const now=Date.now(),points=[];let prior=0;for(let i=0;i<trades.length;i++){const value=ledgerCalc(trades.slice(0,i+1)).totals.realised;points.push({t:Date.parse(trades[i].date),p:value,delta:value-prior});prior=value;}
+function renderPerformance(){if(!portfolioMode)return;$('periodStats').replaceChildren();const now=Date.now(),points=[];let prior=0;const t=ledgerCalc(trades,(e,v)=>{points.push({t:Date.parse(e.date),p:v,delta:v-prior});prior=v}).totals;
  for(const [label,days] of [['24h',1],['7 days',7],['30 days',30],['All time',Infinity]]){const v=points.filter(p=>now-p.t<=days*24*HOUR&&p.t<=now).reduce((s,p)=>s+p.delta,0);const div=document.createElement('div'),b=document.createElement('b');div.textContent=label+' realised P&L';b.textContent=money(v);b.className=v>=0?'good':'warn';div.append(b);$('periodStats').append(div)}
- const svg=$('profitPlot');svg.replaceChildren();if(!points.length){$('perfStatus').textContent='Record trades to see your profit over time.';return}const vals=[0,...points.map(p=>p.p)],lo=Math.min(...vals),hi=Math.max(...vals),x=i=>60+710*i/Math.max(1,vals.length-1),y=v=>185-150*(v-lo)/Math.max(1,hi-lo);const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',vals.map((v,i)=>(i?'L':'M')+x(i)+' '+y(v)).join(' '));path.setAttribute('fill','none');path.setAttribute('stroke','#83e3b1');path.setAttribute('stroke-width','3');svg.append(path);for(const [v,py] of [[hi,20],[lo,210]]){const a=document.createElementNS('http://www.w3.org/2000/svg','text');a.setAttribute('x','4');a.setAttribute('y',py);a.setAttribute('fill','#aab9ca');a.setAttribute('font-size','12');a.textContent=money(v);svg.append(a)}$('perfStatus').textContent='Cumulative recorded realised P&L '+money(t.realised)+' · '+trades.length+' transactions (horizontal axis = transaction order).';
+ const svg=$('profitPlot');svg.replaceChildren();if(!points.length){$('perfStatus').textContent='Record trades to see your profit over time.';return}const full=[0,...points.map(p=>p.p)],vals=full.length>1000?Array.from({length:1000},(_,i)=>full[Math.floor(i*(full.length-1)/999)]):full,lo=Math.min(...full),hi=Math.max(...full),x=i=>60+710*i/Math.max(1,vals.length-1),y=v=>185-150*(v-lo)/Math.max(1,hi-lo);const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',vals.map((v,i)=>(i?'L':'M')+x(i)+' '+y(v)).join(' '));path.setAttribute('fill','none');path.setAttribute('stroke','#83e3b1');path.setAttribute('stroke-width','3');svg.append(path);for(const [v,py] of [[hi,20],[lo,210]]){const a=document.createElementNS('http://www.w3.org/2000/svg','text');a.setAttribute('x','4');a.setAttribute('y',py);a.setAttribute('fill','#aab9ca');a.setAttribute('font-size','12');a.textContent=money(v);svg.append(a)}$('perfStatus').textContent='Cumulative recorded realised P&L '+money(t.realised)+' · '+trades.length+' transactions (horizontal axis = transaction order).';
 }
 const starterRecipes=[
  {name:'Bolt of Linen Cloth',id:2996,profession:'Tailoring',skill:1,yield:1,mats:[[2589,2]],fixed:0},
