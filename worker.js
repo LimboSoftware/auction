@@ -59,7 +59,7 @@ export default {async fetch(req,env){
  const u=new URL(req.url);
  if(!u.pathname.startsWith("/api/"))return env.ASSETS.fetch(req);
  if(req.method!=="GET")return new Response("Method not allowed",{status:405});
- if(u.pathname==="/api/version")return Response.json({version:"2.3",build:"history-refresh-fix",market:MARKET},{headers:{"Cache-Control":"no-store"}});
+ if(u.pathname==="/api/version")return Response.json({version:"2.4",build:"manual-auctionator-import",market:MARKET},{headers:{"Cache-Control":"no-store"}});
  let path;
  if(u.pathname==="/api/table")path="/pricetable/"+MARKET;
  else if(u.pathname==="/api/table/blackwater")return blackwater(req,env);
